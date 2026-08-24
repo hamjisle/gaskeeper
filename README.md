@@ -96,6 +96,7 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm run start`: start the built Vinext application
 - `npm test`: build and verify the rendered development-preview metadata
 - `npm run db:generate`: generate Drizzle migrations after schema changes
+- `npm run build:offline`: regenerate `offline-game/index.html` from `offline-game/template.html`, inlining a type-stripped esbuild bundle of `app/game-data.ts` + `app/game-renderer.ts` and the current `app/globals.css`. Run this after editing game data, rendering, or styles so the dependency-free offline build (and its Vercel static deployment) stays in sync with the online app. Edit `offline-game/template.html`, never `offline-game/index.html` directly — it's a build artifact.
 
 Use build commands for targeted diagnosis after a remote failure, not as part of the normal checkpoint path.
 
