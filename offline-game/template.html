@@ -9,7 +9,7 @@
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="app" class="rpg-app"></div>
 <div id="modal-root"></div>
 <script>
 /*__GASKEEPER_CORE_BUNDLE__*/
@@ -166,7 +166,7 @@ function exportResultCard(){
 }
 
 // ===== title screen =====
-function applyLargeText(){document.documentElement.classList.toggle("large-text",largeText);}
+function applyLargeText(){var z=largeText?"1.16":"1";app.style.zoom=z;modalRoot.style.zoom=z;}
 function pickDifficulty(key){difficulty=key;hud=GK.emptyHud(key);tone(330+(key==="middle"?90:key==="high"?160:0),.06,"triangle");renderTitle();}
 function pickScenarioChoice(id){scenarioChoice=id;renderTitle();}
 function toggleTeacherMode(on){teacherMode=on;renderTitle();}
@@ -938,9 +938,20 @@ function syncCanvasResolution(){
 }
 function gameLoop(now){
   if(screen!=="game"){rafId=0;return;}
+  var shouldContinue=true;
+  try{
+    shouldContinue=gameLoopStep(now);
+  }catch(err){
+    console.error("Gaskeeper game loop error:",err);
+    setMessage("일시적인 화면 오류가 발생했습니다(F12 콘솔 참고). 자동으로 다시 시도합니다: "+(err&&err.message?err.message:String(err)));
+  }
+  if(shouldContinue===false){rafId=0;return;}
+  rafId=requestAnimationFrame(gameLoop);
+}
+function gameLoopStep(now){
   syncCanvasResolution();
   var r=run;
-  if(!r||r.finished){rafId=requestAnimationFrame(gameLoop);return;}
+  if(!r||r.finished)return false;
   var dt=Math.min(.034,(now-lastFrame)/1000);lastFrame=now;
   var c=cfg();
   r.sparkBurst=Math.max(0,r.sparkBurst-dt);GK.updateEffects(r,dt);
@@ -981,7 +992,7 @@ function gameLoop(now){
       if(eventIndex===0&&!r.crisisHandled){r.crisisActive=true;r.crisisTimer=5;renderCrisisModal();}
       setMessage("돌발상황 "+r.eventCount+"/"+c.events+": "+r.eventLabel);speak("돌발 상황. "+r.eventLabel);haptic([70,50,70]);
     }
-    if(r.seconds<=0){r.seconds=0;finishRun(false);return;}
+    if(r.seconds<=0){r.seconds=0;finishRun(false);return false;}
     var dx=(input.right?1:0)-(input.left?1:0)+input.axisX,dy=(input.down?1:0)-(input.up?1:0)+input.axisY;
     r.player.moving=!!(dx||dy);
     if(dx||dy){
@@ -1074,11 +1085,11 @@ function gameLoop(now){
       for(var pi=0;pi<summonCount;pi++)r.enemies.push({id:"phase-wisp-"+pi,x:boss.x+(pi-(summonCount-1)/2)*90,y:boss.y+(pi%2?-60:60),spawnX:boss.x,spawnY:boss.y,hp:c.enemyHp,maxHp:c.enemyHp,kind:pi%2?"crawler":"wisp",phase:1.2+pi,hitWait:0,respawnWait:0,respawnable:false});
       setMessage(GK.SCENARIOS[r.scenarioId].boss+" 2단계! "+GK.DIFFICULTIES[difficulty].short+" 난이도 위험체 "+summonCount+"기 증원.");tone(74,.2,"sawtooth");
     }
-    if(r.player.hp<=0){r.player.hp=0;finishRun(false);return;}
+    if(r.player.hp<=0){r.player.hp=0;finishRun(false);return false;}
     hudClock+=dt;if(hudClock>.11){hudClock=0;syncHud();}
   }
   GK.drawWorld(ctx2d,r,now/1000,reducedFx,difficulty,profile.suitTier);
-  rafId=requestAnimationFrame(gameLoop);
+  return true;
 }
 
 // ===== keyboard input =====
@@ -1112,7 +1123,8 @@ window.G={
   interact:interact,answer:answer,closeQuestion:closeQuestion,answerDeduction:answerDeduction,closeDeduction:closeDeduction,resolveCrisis:resolveCrisis,
   storyAnswerDeduction:storyAnswerDeduction,storyCloseDeduction:storyCloseDeduction,storyAnswer:storyAnswer,storyCloseQuestion:storyCloseQuestion,storyResolveCrisis:storyResolveCrisis,
   resetToTitle:resetToTitle,toggleMissionPanel:toggleMissionPanel,toggleLeftHanded:toggleLeftHanded,toggleFullscreen:toggleFullscreen,dismissTouchGuide:dismissTouchGuide,
-  exportResultCard:exportResultCard
+  exportResultCard:exportResultCard,
+  __debugLoop:gameLoop,__debugState:function(){return {screen:screen,paused:paused,run:run};}
 };
 
 renderTitle();
