@@ -1,7 +1,7 @@
 export type Difficulty = "elementary" | "middle" | "high";
 export type ScenarioId = "kitchen" | "restaurant" | "camping" | "laboratory" | "boiler";
 export type ScenarioChoice = ScenarioId | "random";
-export type Screen = "title" | "briefing" | "game" | "story" | "result";
+export type Screen = "title" | "briefing" | "game" | "story" | "result" | "review";
 export type StationId = "valve" | "vent" | "report";
 export type LoreId = "flame" | "camp" | "butane" | "soapcheck" | "reignite";
 export type InteractableId = StationId | LoreId;
@@ -304,6 +304,15 @@ export function safetyQuestion(id:InteractableId,difficulty:Difficulty,scenarioI
   if(id==="valve")return VALVE_ACTIONS[difficulty][scenarioId];
   if(id==="vent"||id==="report")return FOLLOWUP_ACTIONS[difficulty][id];
   return QUESTIONS[id];
+}
+
+export type PendingMistake = { questionId:InteractableId; scenarioId:ScenarioId; difficulty:Difficulty; at:number };
+export function addMistake(list:PendingMistake[],mistake:PendingMistake,cap=10):PendingMistake[]{
+  const rest=list.filter(item=>item.questionId!==mistake.questionId);
+  return [mistake,...rest].slice(0,cap);
+}
+export function removeMistake(list:PendingMistake[],questionId:InteractableId):PendingMistake[]{
+  return list.filter(item=>item.questionId!==questionId);
 }
 
 export function rewindExplanation(choice:QuestionChoice,difficulty:Difficulty){

@@ -3,10 +3,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
 
-import type { CrisisChoice, DashboardReport, DeductionChoice, Difficulty, Hud, InteractableId, LoreId, ProgressProfile, QuestionChoice, ResultData, RewindInfo, RunState, Screen, ScenarioChoice, ScenarioId, StationId } from "./game-data";
-import { CACHES, CRISIS_ACTIONS, DEDUCTIONS, DIFFICULTIES, EVIDENCE, GAS_POOLS, LEVEL_GUIDES, LEVEL_STATS, QUESTIONS, RESCUES, SAFE_CHAIN_STEPS, SCENARIOS, SPARK_TRAPS, STATIONS, TABLETS, WORLD, addShake, awardSafetyStep, blocked, breakSafetyChain, clamp, createRun, distance, dynamicBlocked, emptyHud, formatTime, logAction, nearbyAction, objectiveFor, objectiveTarget, profileId, requiredEvidence, rewindExplanation, safetyPath, safetyQuestion, spawnParticles, spawnScenarioBoss, updateEffects } from "./game-data";
+import type { CrisisChoice, DashboardReport, DeductionChoice, Difficulty, Hud, InteractableId, LoreId, PendingMistake, ProgressProfile, QuestionChoice, ResultData, RewindInfo, RunState, Screen, ScenarioChoice, ScenarioId, StationId } from "./game-data";
+import { CACHES, CRISIS_ACTIONS, DEDUCTIONS, DIFFICULTIES, EVIDENCE, GAS_POOLS, LEVEL_GUIDES, LEVEL_STATS, QUESTIONS, RESCUES, SAFE_CHAIN_STEPS, SCENARIOS, SPARK_TRAPS, STATIONS, TABLETS, WORLD, addMistake, addShake, awardSafetyStep, blocked, breakSafetyChain, clamp, createRun, distance, dynamicBlocked, emptyHud, formatTime, logAction, nearbyAction, objectiveFor, objectiveTarget, profileId, removeMistake, requiredEvidence, rewindExplanation, safetyPath, safetyQuestion, spawnParticles, spawnScenarioBoss, updateEffects } from "./game-data";
 import { drawWorld } from "./game-renderer";
 
+const REVIEW_QUEUE_KEY="gaskeeper-review-queue-v1";
+function loadReviewQueue():PendingMistake[]{
+  if(typeof window==="undefined")return[];
+  try{const raw=window.localStorage.getItem(REVIEW_QUEUE_KEY);return raw?JSON.parse(raw) as PendingMistake[]:[];}catch{return[];}
+}
+function saveReviewQueue(list:PendingMistake[]){
+  if(typeof window==="undefined")return;
+  try{window.localStorage.setItem(REVIEW_QUEUE_KEY,JSON.stringify(list));}catch{}
+}
 
 function HeroPortrait(){
   return <div className="hero-portrait" aria-label="가스안전 수호기사 가온">
@@ -45,6 +54,9 @@ export default function Home(){
   const [activeDeduction,setActiveDeduction]=useState(false);
   const [deductionFeedback,setDeductionFeedback]=useState<{correct:boolean;text:string}|null>(null);
   const [deductionEvidence,setDeductionEvidence]=useState<string[]>([]);
+  const [reviewQueue,setReviewQueue]=useState<PendingMistake[]>(()=>loadReviewQueue());
+  const [reviewFeedback,setReviewFeedback]=useState<{correct:boolean;text:string;note:string}|null>(null);
+  const [reviewBannerDismissed,setReviewBannerDismissed]=useState(false);
   const [result,setResult]=useState<ResultData|null>(null);
   const [sessionReports,setSessionReports]=useState<ResultData[]>([]);
   const [showDashboard,setShowDashboard]=useState(false);
@@ -86,6 +98,10 @@ export default function Home(){
   const createCoopSession=useCallback(async()=>{const alphabet="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let code="";for(let i=0;i<6;i++)code+=alphabet[Math.floor(Math.random()*alphabet.length)];setCoopCode(code);setCoopConnected(false);coopLastIdRef.current=0;try{await fetch("/api/coop",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({op:"create",code})});const url=`${window.location.origin}/?controller=${code}`;setCoopQr(await QRCode.toDataURL(url,{width:228,margin:1,color:{dark:"#081014",light:"#effffb"}}));}catch{setMessage("협동 연결을 준비하지 못했습니다. 한 화면 2인 모드로 계속할 수 있습니다.");}return code;},[]);
 
   const sendControllerAction=useCallback(async(action:string)=>{if(!coopCode)return;setControllerStatus("입력 전송 중…");try{const response=await fetch("/api/coop",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({op:"action",code:coopCode,action})});setControllerStatus(response.ok?`${action==="pulse"?"탐지 펄스":action==="interact"?"안전 행동":action==="medkit"?"안전키트":action==="drone"?"차단 드론":action==="shield"?"보호막":"환기 유도기"} 입력 완료`:`연결이 끊어졌습니다.`);haptic(response.ok?24:[50,40,50]);}catch{setControllerStatus("전송 실패 · 연결 상태를 확인하세요.");}},[coopCode,haptic]);
+
+  const recordMistake=useCallback((questionId:InteractableId)=>{
+    setReviewQueue(prev=>{const next=addMistake(prev,{questionId,scenarioId,difficulty,at:Date.now()});saveReviewQueue(next);return next;});
+  },[difficulty,scenarioId]);
 
   const finishRun=useCallback((victory:boolean)=>{
     const r=runRef.current;if(!r||r.finished)return;r.finished=true;pausedRef.current=true;
@@ -147,10 +163,10 @@ export default function Home(){
       spawnParticles(r,r.player.x,r.player.y-20,"#f0d27b",22,reducedFx);
       setRewindInfo(null);if(activeQuestion==="valve")haptic(180);else haptic([24,30,24]);
     }else{
-      r.wrongChoices++;r.lastMistake=choice.label;const rewind=rewindExplanation(choice,difficulty),electrical=rewind.hazard==="spark";if(electrical){r.sparkHits++;r.sparkBurst=1.25;r.hitFlash=1;r.player.hp=Math.max(1,r.player.hp-cfg.wrongDamage*1.35);}else r.player.hp=Math.max(1,r.player.hp-cfg.wrongDamage);r.score=Math.max(0,r.score-(electrical?70:40));breakSafetyChain(r,"위험 행동",`${choice.label} → ${rewind.result}`);setFeedback({correct:false,text:choice.feedback,note:currentQuestion?.correctNote??QUESTIONS[activeQuestion].correctNote});setRewindInfo({choice:choice.label,cause:rewind.cause,result:rewind.result,hazard:rewind.hazard});tone(108,.18,"sawtooth");haptic([45,35,45,35,110]);
+      r.wrongChoices++;r.lastMistake=choice.label;const rewind=rewindExplanation(choice,difficulty),electrical=rewind.hazard==="spark";if(electrical){r.sparkHits++;r.sparkBurst=1.25;r.hitFlash=1;r.player.hp=Math.max(1,r.player.hp-cfg.wrongDamage*1.35);}else r.player.hp=Math.max(1,r.player.hp-cfg.wrongDamage);r.score=Math.max(0,r.score-(electrical?70:40));breakSafetyChain(r,"위험 행동",`${choice.label} → ${rewind.result}`);setFeedback({correct:false,text:choice.feedback,note:currentQuestion?.correctNote??QUESTIONS[activeQuestion].correctNote});setRewindInfo({choice:choice.label,cause:rewind.cause,result:rewind.result,hazard:rewind.hazard});recordMistake(activeQuestion);tone(108,.18,"sawtooth");haptic([45,35,45,35,110]);
     }
     syncHud();
-  },[activeQuestion,cfg.pathSeconds,cfg.wrongDamage,currentQuestion,difficulty,feedback,haptic,reducedFx,syncHud,tone]);
+  },[activeQuestion,cfg.pathSeconds,cfg.wrongDamage,currentQuestion,difficulty,feedback,haptic,reducedFx,recordMistake,syncHud,tone]);
 
   const closeQuestion=useCallback(()=>{
     if(!feedback)return;if(feedback.correct){const r=runRef.current;const all=r?.completed.size===3;const lore=activeQuestion?TABLETS.some(t=>t.id===activeQuestion):false;const bossMessage=r&&r.rescued.size<1?`구조 대상을 먼저 대피시켜 ${SCENARIOS[r.scenarioId].boss}의 보호막을 해제하세요!`:`세 안전인장이 모였습니다. 탐지 펄스로 ${r?SCENARIOS[r.scenarioId].boss:"보스"}를 봉인하세요!`;setMessage(lore?`지식석판을 해독했습니다. 탐지기가 LV.${1+(r?.knowledge.size??0)}로 강화되었습니다!`:all?bossMessage:activeQuestion==="valve"?"공급 차단 완료! 자동 차단 드론이 해금되고 가스 균열 재출현이 멈췄습니다.":activeQuestion==="vent"?"자연환기 시작! 환기 유도기가 해금되었습니다.":"안전인장을 획득했습니다. 다음 구역으로 이동하세요.");setActiveQuestion(null);setFeedback(null);setRewindInfo(null);pausedRef.current=false;}else{setFeedback(null);setRewindInfo(null);}
@@ -186,8 +202,8 @@ export default function Home(){
   const storyAnswer=useCallback((choice:QuestionChoice)=>{
     if(feedback)return;
     if(choice.correct){setFeedback({correct:true,text:choice.feedback,note:currentQuestion?.correctNote??""});tone(784,.16,"triangle");}
-    else{setStoryWrong(w=>w+1);const rewind=rewindExplanation(choice,difficulty);if(rewind.hazard==="spark")setStorySparkHits(s=>s+1);setFeedback({correct:false,text:choice.feedback,note:currentQuestion?.correctNote??""});tone(108,.18,"sawtooth");}
-  },[currentQuestion,difficulty,feedback,tone]);
+    else{setStoryWrong(w=>w+1);const rewind=rewindExplanation(choice,difficulty);if(rewind.hazard==="spark")setStorySparkHits(s=>s+1);setFeedback({correct:false,text:choice.feedback,note:currentQuestion?.correctNote??""});if(activeQuestion)recordMistake(activeQuestion);tone(108,.18,"sawtooth");}
+  },[activeQuestion,currentQuestion,difficulty,feedback,recordMistake,tone]);
 
   const storyCloseQuestion=useCallback(()=>{
     if(!feedback)return;
@@ -269,6 +285,30 @@ export default function Home(){
 
   useEffect(()=>{if(!coOp||!coopCode||screen!=="game"||controllerMode)return;let stopped=false,busy=false;const poll=async()=>{if(stopped||busy)return;busy=true;try{const response=await fetch(`/api/coop?code=${coopCode}&after=${coopLastIdRef.current}`,{cache:"no-store"});if(response.ok){const data=await response.json() as {connected:boolean;actions:{id:number;action:string}[]};setCoopConnected(data.connected);for(const item of data.actions){coopLastIdRef.current=Math.max(coopLastIdRef.current,item.id);const r=runRef.current;if(r)r.coopActions++;if(item.action==="pulse")detectorPulse();if(item.action==="interact")interact();if(item.action==="medkit")activateMedkit();if(item.action==="drone")activateDrone();if(item.action==="shield")activateShield();if(item.action==="vent")activateVentGuide();}if(data.actions.length)syncHud();}}catch{}finally{busy=false;}};void poll();const timer=setInterval(poll,260);return()=>{stopped=true;clearInterval(timer);};},[activateDrone,activateMedkit,activateShield,activateVentGuide,coOp,coopCode,controllerMode,detectorPulse,interact,screen,syncHud]);
 
+  const reviewItem=reviewQueue[0]??null;
+  const reviewQuestionData=reviewItem?safetyQuestion(reviewItem.questionId,reviewItem.difficulty,reviewItem.scenarioId):null;
+  const reviewChoices=useMemo(()=>{
+    if(!reviewItem||!reviewQuestionData)return[];
+    const options=DIFFICULTIES[reviewItem.difficulty].options,all=reviewQuestionData.choices,correct=all.find(c=>c.correct)!;
+    return [correct,...all.filter(c=>!c.correct).slice(0,options-1)].sort((a,b)=>a.slot-b.slot);
+  },[reviewItem,reviewQuestionData]);
+
+  const startReview=useCallback(()=>{if(!reviewQueue.length)return;setReviewFeedback(null);setScreen("review");tone(460,.1,"triangle");},[reviewQueue.length,tone]);
+
+  const reviewAnswer=useCallback((choice:QuestionChoice)=>{
+    if(!reviewItem||reviewFeedback)return;
+    if(choice.correct){setReviewFeedback({correct:true,text:choice.feedback,note:reviewQuestionData?.correctNote??""});tone(784,.16,"triangle");}
+    else{setReviewFeedback({correct:false,text:choice.feedback,note:reviewQuestionData?.correctNote??""});tone(108,.18,"sawtooth");}
+  },[reviewFeedback,reviewItem,reviewQuestionData,tone]);
+
+  const closeReviewItem=useCallback(()=>{
+    if(!reviewFeedback||!reviewItem)return;
+    if(!reviewFeedback.correct){setReviewFeedback(null);return;}
+    const next=removeMistake(reviewQueue,reviewItem.questionId);saveReviewQueue(next);setReviewQueue(next);
+    setReviewFeedback(null);
+    if(next.length===0){setScreen("title");setMessage("복습을 모두 마쳤습니다! 다음 임무에서 만나요.");}
+  },[reviewFeedback,reviewItem,reviewQueue]);
+
   const visibleChoices=useMemo(()=>{
     if(!currentQuestion)return[];const all=currentQuestion.choices;const correct=all.find(c=>c.correct)!;return [correct,...all.filter(c=>!c.correct).slice(0,cfg.options-1)].sort((a,b)=>a.slot-b.slot);
   },[cfg.options,currentQuestion]);
@@ -316,7 +356,7 @@ export default function Home(){
   const tapMedkit=()=>{haptic([18,35,22]);activateMedkit();};
   const dismissTouchGuide=()=>{setShowTouchGuide(false);pausedRef.current=false;haptic(20);speak(`${scenario.place} 사고 임무를 시작합니다. 왼쪽 조이스틱으로 이동해 빛나는 현장 단서를 수집하세요.`);};
   const toggleFullscreen=async()=>{try{haptic(10);if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen();}catch{setMessage("브라우저 메뉴의 전체화면 기능을 사용해 주세요.");}};
-  const resetToTitle=()=>{pausedRef.current=true;runRef.current=null;stopPulseHold();stopJoystick();setShowTouchGuide(false);setShowMissionPanel(false);setScreen("title");setResult(null);setActiveQuestion(null);setActiveDeduction(false);setDeductionFeedback(null);setDeductionEvidence([]);setStoryStep(0);setStoryWrong(0);setStorySparkHits(0);};
+  const resetToTitle=()=>{pausedRef.current=true;runRef.current=null;stopPulseHold();stopJoystick();setShowTouchGuide(false);setShowMissionPanel(false);setScreen("title");setResult(null);setActiveQuestion(null);setActiveDeduction(false);setDeductionFeedback(null);setDeductionEvidence([]);setStoryStep(0);setStoryWrong(0);setStorySparkHits(0);setReviewFeedback(null);};
   const rank=result?.victory?(result.safetyIndex>=90?{icon:"👑",title:"골든타임 가스키퍼",copy:"안전 행동과 구조 임무를 정확한 순서로 완수했습니다."}:result.safetyIndex>=75?{icon:"🛡️",title:"가스안전 수호기사",copy:"누출 원인을 해결하고 폭압 군주를 성공적으로 봉인했습니다."}:{icon:"◆",title:"현장 대응기사",copy:"임무는 완수했습니다. 분석 보고서의 보완 행동을 확인하세요."}):{icon:"📜",title:"현장 견습기사",copy:"임무분석 보고서의 보완 행동을 확인한 뒤 다시 도전하세요."};
   const reportTip=result?(result.lastMistake?`보완 행동: “${result.lastMistake}” 대신 전기·화기 조작을 피하고 안전 순서를 지키세요.`:result.rescued<2?"보완 행동: 위험 제거뿐 아니라 주변 사람을 신선한 공기가 있는 안전구역으로 대피시키세요.":"완벽 대응: 탐지 → 차단 → 자연환기 → 대피 → 안전한 곳에서 신고 순서를 기억하세요."):"";
 
@@ -343,6 +383,7 @@ export default function Home(){
           {experienceMode==="story"&&<p className="story-mode-note">전투·타이머 없이 증거→추리→차단→환기→신고→위기판단 순서로 압박 없이 진행합니다.</p>}
           {teacherMode&&<div className="scenario-selector"><small>교사용 사고 시나리오</small><div><button className={scenarioChoice==="random"?"selected":""} onClick={()=>setScenarioChoice("random")}>🎲 무작위</button>{(Object.keys(SCENARIOS) as ScenarioId[]).map(id=><button key={id} className={scenarioChoice===id?"selected":""} onClick={()=>setScenarioChoice(id)}>{SCENARIOS[id].icon} {SCENARIOS[id].place}</button>)}</div>{classroomStats&&<p>누적 {classroomStats.count}회 · 평균 안전지수 <b>{classroomStats.average}</b> · 위험판단 발생 {classroomStats.mistakes}회</p>}<button className="dashboard-open" onClick={()=>void loadDashboard()}>📊 교사용 학습 대시보드 열기</button></div>}
           <div className="profile-strip"><div><span>수호복 TIER {profile.suitTier}</span><b>가온 · 탐지기 LV.{profile.sensorLevel}</b></div><p>누적 XP <strong>{profile.xp.toLocaleString()}</strong> · 연속 성공 <strong>{profile.streak}</strong> · 최고 안전지수 <strong>{profile.bestIndex}</strong></p><button onClick={()=>void loadDashboard()}>성장·기록</button></div>
+          {reviewQueue.length>0&&!reviewBannerDismissed&&<div className="review-banner"><div><span>📚 오답 복습</span><b>지난번 틀린 문제 {reviewQueue.length}개가 남아 있어요</b></div><div><button className="plain-button" onClick={()=>setReviewBannerDismissed(true)}>나중에</button><button className="gold-button compact" onClick={startReview}><span>복습하기</span></button></div></div>}
           <button className="gold-button" onClick={prepareBriefing}><span>{cfg.time}초 {cfg.tag} 임무를 시작한다</span><b>START GOLDEN TIME</b></button>
         </div>
         <HeroPortrait/>
@@ -373,6 +414,21 @@ export default function Home(){
         <p className="message-scroll">{message}</p>
         {storyStep===5&&<div className="crisis-card static"><h3>{CRISIS_ACTIONS[scenarioId].title}</h3><p>{CRISIS_ACTIONS[scenarioId].prompt}</p><div>{visibleCrisisChoices.map((choice,index)=><button key={choice.id} onClick={()=>storyResolveCrisis(choice)}><i>{String.fromCharCode(65+index)}</i><b>{choice.label}</b></button>)}</div><small>시간 제한 없이 가장 안전한 행동을 고르세요.</small></div>}
         <button className="plain-button" onClick={resetToTitle}>중단하고 처음으로</button>
+      </div>
+    </section>}
+
+    {screen==="review"&&reviewItem&&reviewQuestionData&&<section className="story-screen review-screen">
+      <div className="story-card">
+        <span className="chapter-label">REVIEW · {SCENARIOS[reviewItem.scenarioId].place}</span>
+        <h2>📚 오답 복습</h2>
+        <p className="message-scroll">남은 문제 {reviewQueue.length}개 · 맞히면 목록에서 사라집니다.</p>
+        <div className="question-card">
+          <div className="question-rune">{TABLETS.find(t=>t.id===reviewItem.questionId)?.mark??(reviewItem.questionId==="valve"?"V":reviewItem.questionId==="vent"?"風":"119")}</div>
+          <h2>{reviewQuestionData.title}</h2><p>{reviewQuestionData.prompt}</p>
+          <div className="question-options">{reviewChoices.map((choice,index)=><button key={choice.id} disabled={!!reviewFeedback} className={reviewFeedback?(choice.correct?"correct":"muted"):""} onClick={()=>reviewAnswer(choice)}><i>{String.fromCharCode(65+index)}</i><b>{choice.label}</b>{reviewFeedback&&choice.correct&&<span>✓</span>}</button>)}</div>
+          {reviewFeedback&&<div className={`answer-feedback ${reviewFeedback.correct?"safe":"danger"}`}><span>{reviewFeedback.correct?"◆":"⚠"}</span><div><b>{reviewFeedback.correct?"이번엔 정확했습니다":"다시 판단해 보세요"}</b><p>{reviewFeedback.text}</p><small>{reviewFeedback.note}</small></div><button onClick={closeReviewItem}>{reviewFeedback.correct?"다음 문제":"다시 풀기"}</button></div>}
+        </div>
+        <button className="plain-button" onClick={resetToTitle}>복습 중단하고 처음으로</button>
       </div>
     </section>}
 

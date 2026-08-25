@@ -18,6 +18,11 @@
 (function(){
 "use strict";
 
+// ===== localStorage keys (must be assigned before the initial loadProfile()/loadReports()/loadReviewQueue() calls below) =====
+var PROFILE_KEY="gaskeeper-offline-profile-v1";
+var REPORTS_KEY="gaskeeper-offline-reports-v1";
+var REVIEW_QUEUE_KEY="gaskeeper-offline-review-queue-v1";
+
 // ===== state =====
 var screen="title", difficulty="elementary", scenarioChoice="random", scenarioId="kitchen";
 var teacherMode=false, experienceMode="action";
@@ -33,6 +38,7 @@ var result=null, sessionReports=[];
 var showDashboard=false;
 var profile=loadProfile();
 var dashboardReports=loadReports();
+var reviewQueue=loadReviewQueue(), reviewFeedback=null, reviewBannerDismissed=false, reviewVisibleChoices=[];
 var run=null, paused=true;
 var input={up:false,down:false,left:false,right:false,axisX:0,axisY:0};
 var joystickPointerId=null, pulseTimer=null, audioCtx=null;
@@ -73,13 +79,17 @@ function setMessage(text){message=text;var el=$(".message-scroll");if(el)el.text
 function formatTime(s){return GK.formatTime(s);}
 
 // ===== localStorage profile / classroom dashboard (mirrors the online /api/reports logic) =====
-var PROFILE_KEY="gaskeeper-offline-profile-v1";
-var REPORTS_KEY="gaskeeper-offline-reports-v1";
 function emptyProfile(){return {xp:0,streak:0,missions:0,bestIndex:0,badges:[],sensorLevel:1,suitTier:1};}
 function loadProfile(){try{var raw=localStorage.getItem(PROFILE_KEY);return raw?JSON.parse(raw):emptyProfile();}catch(e){return emptyProfile();}}
 function saveProfileToStorage(){try{localStorage.setItem(PROFILE_KEY,JSON.stringify(profile));}catch(e){}}
 function loadReports(){try{var raw=localStorage.getItem(REPORTS_KEY);return raw?JSON.parse(raw):[];}catch(e){return [];}}
 function saveReportsToStorage(){try{localStorage.setItem(REPORTS_KEY,JSON.stringify(dashboardReports.slice(0,200)));}catch(e){}}
+function loadReviewQueue(){try{var raw=localStorage.getItem(REVIEW_QUEUE_KEY);return raw?JSON.parse(raw):[];}catch(e){return [];}}
+function saveReviewQueueToStorage(){try{localStorage.setItem(REVIEW_QUEUE_KEY,JSON.stringify(reviewQueue));}catch(e){}}
+function recordMistake(questionId){
+  reviewQueue=GK.addMistake(reviewQueue,{questionId:questionId,scenarioId:scenarioId,difficulty:difficulty,at:Date.now()});
+  saveReviewQueueToStorage();
+}
 var BADGE_BY_SCENARIO={kitchen:"LNG 배지",restaurant:"LPG 배지",camping:"부탄가스 배지",laboratory:"배관 분석 배지",boiler:"CO 배지"};
 
 function saveMission(report){
@@ -170,6 +180,7 @@ function applyLargeText(){var z=largeText?"1.16":"1";app.style.zoom=z;modalRoot.
 function pickDifficulty(key){difficulty=key;hud=GK.emptyHud(key);tone(330+(key==="middle"?90:key==="high"?160:0),.06,"triangle");renderTitle();}
 function pickScenarioChoice(id){scenarioChoice=id;renderTitle();}
 function toggleTeacherMode(on){teacherMode=on;renderTitle();}
+function dismissReviewBanner(){reviewBannerDismissed=true;renderTitle();}
 function setExperienceMode(mode){experienceMode=mode;renderTitle();}
 
 function renderTitle(){
@@ -202,6 +213,7 @@ function renderTitle(){
         (experienceMode==="story"?'<p class="story-mode-note">전투·타이머 없이 증거→추리→차단→환기→신고→위기판단 순서로 압박 없이 진행합니다.</p>':'')+
         scenarioSelector+
         '<div class="profile-strip"><div><span>수호복 TIER '+profile.suitTier+'</span><b>가온 · 탐지기 LV.'+profile.sensorLevel+'</b></div><p>누적 XP <strong>'+profile.xp.toLocaleString()+'</strong> · 연속 성공 <strong>'+profile.streak+'</strong> · 최고 안전지수 <strong>'+profile.bestIndex+'</strong></p><button onclick="G.openDashboard()">성장·기록</button></div>'+
+        (reviewQueue.length&&!reviewBannerDismissed?('<div class="review-banner"><div><span>📚 오답 복습</span><b>지난번 틀린 문제 '+reviewQueue.length+'개가 남아 있어요</b></div><div><button class="plain-button" onclick="G.dismissReviewBanner()">나중에</button><button class="gold-button compact" onclick="G.startReview()"><span>복습하기</span></button></div></div>'):'')+
         '<button class="gold-button" onclick="G.prepareBriefing()"><span>'+cfg().time+'초 '+cfg().tag+' 임무를 시작한다</span><b>START GOLDEN TIME</b></button>'+
       '</div>'+
       '<div class="hero-portrait" aria-label="가스안전 수호기사 가온">'+
@@ -437,6 +449,7 @@ function answer(index){
     var cq2=currentQuestion();
     feedback={correct:false,text:choice.feedback,note:(cq2&&cq2.correctNote)||GK.QUESTIONS[activeQuestion].correctNote};
     rewindInfo={choice:choice.label,cause:rewind.cause,result:rewind.result,hazard:rewind.hazard};
+    recordMistake(activeQuestion);
     tone(108,.18,"sawtooth");haptic([45,35,45,35,110]);
   }
   syncHud();renderQuestionModal();
@@ -588,9 +601,57 @@ function resetToTitle(){
   paused=true;run=null;stopPulseHold();stopGameLoop();
   showTouchGuide=false;showMissionPanel=false;
   result=null;activeQuestion=null;activeDeduction=false;deductionFeedback=null;deductionEvidence=[];
-  storyStep=0;storyWrong=0;storySparkHits=0;
+  storyStep=0;storyWrong=0;storySparkHits=0;reviewFeedback=null;
   modalRoot.innerHTML="";
   renderTitle();
+}
+function startReview(){
+  if(!reviewQueue.length)return;
+  reviewFeedback=null;screen="review";tone(460,.1,"triangle");
+  renderReview();
+}
+function reviewAnswer(index){
+  var choice=reviewVisibleChoices[index];if(!choice||reviewFeedback)return;
+  var item=reviewQueue[0];if(!item)return;
+  var q=GK.safetyQuestion(item.questionId,item.difficulty,item.scenarioId);
+  if(choice.correct){reviewFeedback={correct:true,text:choice.feedback,note:q.correctNote||""};tone(784,.16,"triangle");}
+  else{reviewFeedback={correct:false,text:choice.feedback,note:q.correctNote||""};tone(108,.18,"sawtooth");}
+  renderReview();
+}
+function closeReviewItem(){
+  if(!reviewFeedback)return;
+  var item=reviewQueue[0];if(!item)return;
+  if(!reviewFeedback.correct){reviewFeedback=null;renderReview();return;}
+  reviewQueue=GK.removeMistake(reviewQueue,item.questionId);
+  saveReviewQueueToStorage();
+  reviewFeedback=null;
+  if(!reviewQueue.length){screen="title";setMessage("복습을 모두 마쳤습니다! 다음 임무에서 만나요.");renderTitle();}
+  else renderReview();
+}
+function renderReview(){
+  var item=reviewQueue[0];
+  if(!item){screen="title";renderTitle();return;}
+  var q=GK.safetyQuestion(item.questionId,item.difficulty,item.scenarioId);
+  var options=GK.DIFFICULTIES[item.difficulty].options;
+  var all=q.choices,correct=all.find(function(c){return c.correct;});
+  reviewVisibleChoices=[correct].concat(all.filter(function(c){return !c.correct;}).slice(0,options-1)).sort(function(a,b){return a.slot-b.slot;});
+  var rune=(GK.TABLETS.find(function(t){return t.id===item.questionId;})||{}).mark||(item.questionId==="valve"?"V":item.questionId==="vent"?"風":"119");
+  app.innerHTML='<section class="story-screen review-screen"><div class="story-card">'+
+    '<span class="chapter-label">REVIEW · '+GK.SCENARIOS[item.scenarioId].place+'</span><h2>📚 오답 복습</h2>'+
+    '<p class="message-scroll">남은 문제 '+reviewQueue.length+'개 · 맞히면 목록에서 사라집니다.</p>'+
+    '<div class="question-card">'+
+      '<div class="question-rune">'+rune+'</div><h2>'+q.title+'</h2><p>'+q.prompt+'</p>'+
+      '<div class="question-options">'+reviewVisibleChoices.map(function(choice,index){
+        return '<button '+(reviewFeedback?"disabled":"")+' class="'+(reviewFeedback?(choice.correct?"correct":"muted"):"")+'" onclick="G.reviewAnswer('+index+')"><i>'+String.fromCharCode(65+index)+'</i><b>'+choice.label+'</b>'+(reviewFeedback&&choice.correct?"<span>✓</span>":"")+'</button>';
+      }).join("")+'</div>'+
+      (reviewFeedback?(
+        '<div class="answer-feedback '+(reviewFeedback.correct?"safe":"danger")+'"><span>'+(reviewFeedback.correct?"◆":"⚠")+'</span><div><b>'+(reviewFeedback.correct?"이번엔 정확했습니다":"다시 판단해 보세요")+'</b><p>'+reviewFeedback.text+'</p><small>'+reviewFeedback.note+'</small></div>'+
+        '<button onclick="G.closeReviewItem()">'+(reviewFeedback.correct?"다음 문제":"다시 풀기")+'</button></div>'
+      ):'')+
+    '</div>'+
+    '<button class="plain-button" onclick="G.resetToTitle()">복습 중단하고 처음으로</button>'+
+  '</div></section>';
+  applyLargeText();
 }
 
 function wireGameControls(){
@@ -831,7 +892,9 @@ function storyAnswer(index){
   else{
     storyWrong++;var rewind=GK.rewindExplanation(choice,difficulty);
     if(rewind.hazard==="spark")storySparkHits++;
-    feedback={correct:false,text:choice.feedback,note:(cq&&cq.correctNote)||""};tone(108,.18,"sawtooth");
+    feedback={correct:false,text:choice.feedback,note:(cq&&cq.correctNote)||""};
+    if(activeQuestion)recordMistake(activeQuestion);
+    tone(108,.18,"sawtooth");
   }
   renderQuestionModal();
 }
@@ -1124,6 +1187,7 @@ window.G={
   storyAnswerDeduction:storyAnswerDeduction,storyCloseDeduction:storyCloseDeduction,storyAnswer:storyAnswer,storyCloseQuestion:storyCloseQuestion,storyResolveCrisis:storyResolveCrisis,
   resetToTitle:resetToTitle,toggleMissionPanel:toggleMissionPanel,toggleLeftHanded:toggleLeftHanded,toggleFullscreen:toggleFullscreen,dismissTouchGuide:dismissTouchGuide,
   exportResultCard:exportResultCard,
+  dismissReviewBanner:dismissReviewBanner,startReview:startReview,reviewAnswer:reviewAnswer,closeReviewItem:closeReviewItem,
   __debugLoop:gameLoop,__debugState:function(){return {screen:screen,paused:paused,run:run};}
 };
 

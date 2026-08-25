@@ -98,6 +98,8 @@ actions tied to the current ChatGPT user. Leave public content anonymous.
 - `npm run db:generate`: generate Drizzle migrations after schema changes
 - `npm run build:offline`: regenerate `offline-game/index.html` from `offline-game/template.html`, inlining a type-stripped esbuild bundle of `app/game-data.ts` + `app/game-renderer.ts` and the current `app/globals.css`. Run this after editing game data, rendering, or styles so the dependency-free offline build (and its Vercel static deployment) stays in sync with the online app. Edit `offline-game/template.html`, never `offline-game/index.html` directly — it's a build artifact.
 
+Wrong-answer review: both `app/page.tsx` and `offline-game/template.html` track missed station/tablet questions in a `localStorage`-only queue (`gaskeeper-review-queue-v1` online, `gaskeeper-offline-review-queue-v1` offline) surfaced as a title-screen banner. No DB migration — it's local/per-browser by design.
+
 Use build commands for targeted diagnosis after a remote failure, not as part of the normal checkpoint path.
 
 The timeout defaults can be overridden for a controlled canary with `SITES_INSTALL_TIMEOUT`, `SITES_INSTALL_KILL_AFTER`, `SITES_BUILD_TIMEOUT`, and `SITES_BUILD_KILL_AFTER`. A timeout fails the command; the helpers never retry an unchanged install or build.
