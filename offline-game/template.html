@@ -560,7 +560,7 @@ function renderGameScreen(){
           '<div class="skill-rack" aria-label="해금형 안전 스킬">'+
             '<button id="drone-btn" onclick="G.activateDrone()"><i>1</i><span>✦</span><b>차단 드론</b><small id="drone-status">탐지 후 해금</small></button>'+
             '<button id="shield-btn" onclick="G.activateShield()"><i>2</i><span>⬡</span><b>안전 보호막</b><small id="shield-status">구조·차단 후</small></button>'+
-            '<button id="vent-btn" onclick="G.activateVentGuide()"><i>3</i><span>風</span><b>환기 유도기</b><small id="vent-status">환기 후 해금</small></button>'+
+            '<button id="vent-btn" onclick="G.activateVentGuide()"><i>3</i><span>💨</span><b>환기 유도기</b><small id="vent-status">환기 후 해금</small></button>'+
           '</div>'+
         '</div>'+
         (showMissionPanel?'<button class="mission-panel-scrim" aria-label="임무 패널 닫기" onclick="G.toggleMissionPanel()"></button>':'')+
@@ -634,7 +634,7 @@ function renderReview(){
   var options=GK.DIFFICULTIES[item.difficulty].options;
   var all=q.choices,correct=all.find(function(c){return c.correct;});
   reviewVisibleChoices=[correct].concat(all.filter(function(c){return !c.correct;}).slice(0,options-1)).sort(function(a,b){return a.slot-b.slot;});
-  var rune=(GK.TABLETS.find(function(t){return t.id===item.questionId;})||{}).mark||(item.questionId==="valve"?"V":item.questionId==="vent"?"風":"119");
+  var rune=(GK.TABLETS.find(function(t){return t.id===item.questionId;})||{}).mark||(item.questionId==="valve"?"V":item.questionId==="vent"?"💨":"119");
   app.innerHTML='<section class="story-screen review-screen"><div class="story-card">'+
     '<span class="chapter-label">REVIEW · '+GK.SCENARIOS[item.scenarioId].place+'</span><h2>📚 오답 복습</h2>'+
     '<p class="message-scroll">남은 문제 '+reviewQueue.length+'개 · 맞히면 목록에서 사라집니다.</p>'+
@@ -785,7 +785,7 @@ function paintHud(){
       '<div class="quest-step evidence '+(hud.evidence>=hud.evidenceNeeded?"done":"active")+'"><i>'+(hud.evidence>=hud.evidenceNeeded?"✓":"🔎")+'</i><div><b>현장 증거 수집</b><small>'+hud.evidence+' / '+hud.evidenceNeeded+' · 난이도별 단서</small></div></div>'+
       '<div class="quest-step scan '+(hud.detectedLeak?"done":hud.evidence>=hud.evidenceNeeded?"active":"")+'"><i>'+(hud.detectedLeak?"✓":"◉")+'</i><div><b>누출원 추리</b><small>'+(hud.detectedLeak?"좌표 특정 완료":"증거 확보 후 펄스")+'</small></div></div>'+
       '<div class="quest-step '+(hud.seals>=1?"done":hud.detectedLeak?"active":"")+'"><i>'+(hud.seals>=1?"✓":"V")+'</i><div><b>차단 밸브</b><small>전기 조작 없이 공급 차단</small></div></div>'+
-      '<div class="quest-step '+(hud.seals>=2?"done":hud.seals>=1?"active":"")+'"><i>'+(hud.seals>=2?"✓":"風")+'</i><div><b>자연 환기문</b><small>전기 없는 창문·문 환기</small></div></div>'+
+      '<div class="quest-step '+(hud.seals>=2?"done":hud.seals>=1?"active":"")+'"><i>'+(hud.seals>=2?"✓":"💨")+'</i><div><b>자연 환기문</b><small>전기 없는 창문·문 환기</small></div></div>'+
       '<div class="quest-step '+(hud.rescued>=1?"done":hud.seals>=2?"active":"")+'"><i>'+(hud.rescued>=1?"✓":"🧑")+'</i><div><b>인명 대피</b><small>신선한 공기의 안전구역</small></div></div>'+
       '<div class="quest-step '+(hud.seals>=3?"done":hud.rescued>=1?"active":"")+'"><i>'+(hud.seals>=3?"✓":"119")+'</i><div><b>외부 안전 신고</b><small>가스 없는 장소에서 신고</small></div></div>'+
       '<div class="quest-step boss '+(hud.seals===3?"active":"")+'"><i>☠</i><div><b>'+scenario().boss+'</b><small>'+(hud.bossShielded?("보스 브레이크 "+hud.bossBreak+"/5"):"탐지 펄스로 최종 봉인")+'</small></div></div>';
@@ -814,7 +814,7 @@ function renderQuestionModal(){
   var isStory=experienceMode==="story";
   var all=q.choices,correct=all.find(function(c){return c.correct;});
   visibleChoices=[correct].concat(all.filter(function(c){return !c.correct;}).slice(0,cfg().options-1)).sort(function(a,b){return a.slot-b.slot;});
-  var rune=(GK.TABLETS.find(function(t){return t.id===activeQuestion;})||{}).mark||(activeQuestion==="valve"?"V":activeQuestion==="vent"?"風":"119");
+  var rune=(GK.TABLETS.find(function(t){return t.id===activeQuestion;})||{}).mark||(activeQuestion==="valve"?"V":activeQuestion==="vent"?"💨":"119");
   var isLore=GK.TABLETS.some(function(t){return t.id===activeQuestion;});
   var html='<div class="question-overlay" id="question-root" role="dialog" aria-modal="true"><div class="question-card">'+
     '<div class="question-rune">'+rune+'</div><span class="chapter-label">'+(isLore?"SAFETY CODEX":"SAFETY ACTION")+' · '+GK.LEVEL_GUIDES[difficulty].label+'</span>'+

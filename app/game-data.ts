@@ -184,7 +184,7 @@ export const CRISIS_ACTIONS:Record<ScenarioId,{title:string;prompt:string;choice
   boiler:{title:"두통을 호소하는 가족",prompt:"동생이 갑자기 심한 두통과 어지럼을 호소하며 주저앉습니다. 5초 안에 행동하세요.",choices:[{id:"outside",label:"즉시 창문을 열고 밖으로 데리고 나간다",correct:true,feedback:"신선한 공기가 있는 곳으로 이동시켜 CO 노출을 줄였습니다.",hazard:"exposure"},{id:"boiler-off",label:"보일러 전원 버튼부터 직접 끈다",correct:false,feedback:"전기 조작보다 사람을 먼저 안전한 곳으로 이동시켜야 합니다.",hazard:"spark"},{id:"rest",label:"일단 눕혀서 쉬게 한다",correct:false,feedback:"CO가 있는 공간에 계속 머무르면 증상이 악화됩니다.",hazard:"exposure"},{id:"call-inside",label:"실내에서 바로 119에 신고한다",correct:false,feedback:"신고는 가스가 없는 안전한 장소로 이동한 뒤 해야 합니다.",hazard:"exposure"}]},
 };
 
-export const SAFE_CHAIN_STEPS=[{icon:"◉",label:"추리"},{icon:"V",label:"차단"},{icon:"風",label:"환기"},{icon:"🧑",label:"대피"},{icon:"119",label:"신고"}] as const;
+export const SAFE_CHAIN_STEPS=[{icon:"◉",label:"추리"},{icon:"V",label:"차단"},{icon:"💨",label:"환기"},{icon:"🧑",label:"대피"},{icon:"119",label:"신고"}] as const;
 
 export const QUESTIONS:Record<InteractableId,Question> = {
   valve: {
@@ -328,16 +328,16 @@ export function rewindExplanation(choice:QuestionChoice,difficulty:Difficulty){
 export const WORLD={w:1536,h:960};
 export const STATIONS = [
   { id:"valve" as StationId, x:205, y:795, label:"차단 밸브", mark:"V", color:"#dc5d4b" },
-  { id:"vent" as StationId, x:575, y:175, label:"자연 환기문", mark:"風", color:"#55b8d8" },
+  { id:"vent" as StationId, x:575, y:175, label:"자연 환기문", mark:"💨", color:"#55b8d8" },
   { id:"report" as StationId, x:1390, y:755, label:"야외 신고소", mark:"119", color:"#e0b04a" },
 ];
 
 export const TABLETS = [
-  {id:"flame" as LoreId,x:520,y:775,label:"불꽃 지식석판",mark:"炎",color:"#df7e43"},
+  {id:"flame" as LoreId,x:520,y:775,label:"불꽃 지식석판",mark:"🔥",color:"#df7e43"},
   {id:"camp" as LoreId,x:900,y:175,label:"캠핑 지식석판",mark:"⛺",color:"#9e77d7"},
   {id:"butane" as LoreId,x:1305,y:175,label:"부탄캔 지식석판",mark:"B",color:"#62a4df"},
-  {id:"soapcheck" as LoreId,x:150,y:300,label:"비눗물 점검 지식석판",mark:"泡",color:"#6bc9a0"},
-  {id:"reignite" as LoreId,x:1420,y:550,label:"재점화 지식석판",mark:"再",color:"#e0895a"},
+  {id:"soapcheck" as LoreId,x:150,y:300,label:"비눗물 점검 지식석판",mark:"🧼",color:"#6bc9a0"},
+  {id:"reignite" as LoreId,x:1420,y:550,label:"재점화 지식석판",mark:"🔄",color:"#e0895a"},
 ];
 
 export const RESCUES=[
