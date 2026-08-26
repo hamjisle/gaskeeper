@@ -540,7 +540,6 @@ function renderGameScreen(){
         '<div class="hud-stat"><small>안전 점수</small><b id="score-value"></b></div>'+
         '<button class="exit-run" onclick="G.resetToTitle()" aria-label="임무 종료">×</button>'+
       '</header>'+
-      '<div class="boss-bar" id="boss-bar" style="display:none"><span id="boss-label"></span><div><i id="boss-fill"></i></div><b id="boss-hp"></b></div>'+
       '<div class="tablet-toolbar" aria-label="태블릿 화면 설정"><span>TABLET MODE</span><button onclick="G.toggleMissionPanel()" id="mission-toggle">☰ 임무 보기</button><button onclick="G.toggleLeftHanded()">⇄ '+(leftHanded?"오른손 이동":"왼손 이동")+'</button><button onclick="G.toggleFullscreen()">⛶ 전체화면</button></div>'+
       '<div class="orientation-tip">↻ 태블릿을 가로로 돌리면 조작 영역이 더 넓어집니다.</div>'+
       '<div class="dynamic-event" id="dynamic-event" style="display:none"><span>⚠ DYNAMIC EVENT</span><b id="event-label"></b><i id="event-timer"></i></div>'+
@@ -732,13 +731,20 @@ function paintHud(){
   if(timeEl){timeEl.textContent=formatTime(hud.seconds);timeEl.classList.toggle("danger-time",hud.seconds<30);}
   txt("score-value",Math.round(hud.score).toLocaleString());
   var bossBar=document.getElementById("boss-bar");
-  if(bossBar){
-    if(hud.bossMax>0){
-      bossBar.style.display="grid";bossBar.classList.toggle("shielded",hud.bossShielded);
+  if(hud.bossMax>0){
+    if(!bossBar){
+      var hudEl=document.querySelector(".game-hud");
+      if(hudEl)hudEl.insertAdjacentHTML("afterend",'<div class="boss-bar" id="boss-bar"><span id="boss-label"></span><div><i id="boss-fill"></i></div><b id="boss-hp"></b></div>');
+      bossBar=document.getElementById("boss-bar");
+    }
+    if(bossBar){
+      bossBar.classList.toggle("shielded",hud.bossShielded);
       txt("boss-label",hud.bossShielded?("◇ SAFETY BREAK "+hud.bossBreak+"/5"):("☠ "+scenario().boss));
       var fill=document.getElementById("boss-fill");if(fill)fill.style.width=(hud.bossShielded?(hud.bossBreak/5*100):(hud.bossHp/hud.bossMax*100))+"%";
       txt("boss-hp",hud.bossShielded?"LOCK":String(Math.max(0,Math.ceil(hud.bossHp))));
-    }else bossBar.style.display="none";
+    }
+  }else if(bossBar){
+    bossBar.remove();
   }
   var eventBox=document.getElementById("dynamic-event");
   if(eventBox){

@@ -194,7 +194,7 @@ function drawParticles(ctx:CanvasRenderingContext2D,run:RunState){
 
 export function drawWorld(ctx:CanvasRenderingContext2D,run:RunState,time:number,reducedFx=false,difficulty:Difficulty="elementary",suitTier=1){
   const camera={x:clamp(run.player.x-480,0,WORLD.w-960),y:clamp(run.player.y-288,0,WORLD.h-576)};
-  if(run.shake>0){const mag=run.shake*(reducedFx?3:9);camera.x+=(Math.random()-.5)*mag;camera.y+=(Math.random()-.5)*mag;}
+  if(run.shake>0){const mag=run.shake*(reducedFx?3:9);camera.x=clamp(camera.x+(Math.random()-.5)*mag,0,WORLD.w-960);camera.y=clamp(camera.y+(Math.random()-.5)*mag,0,WORLD.h-576);}
   const scenario=SCENARIOS[run.scenarioId];
   ctx.clearRect(0,0,960,576);ctx.fillStyle="#0c0e12";ctx.fillRect(0,0,960,576);ctx.save();ctx.translate(-camera.x,-camera.y);
   ctx.fillStyle="#18232a";ctx.fillRect(0,0,WORLD.w,WORLD.h);
